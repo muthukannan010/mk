@@ -1,39 +1,56 @@
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useGameStore } from '../store/gameStore';
 import * as THREE from 'three';
 
-interface CabCameraProps {
-  view: 'cab' | 'chase';
-}
-
-export function CabCamera({ view }: CabCameraProps) {
+export function CabCamera() {
   const { camera } = useThree();
   const targetPosition = useRef(new THREE.Vector3());
   const lookAtPosition = useRef(new THREE.Vector3());
 
+  // Set up keyboard listeners for camera switching
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const state = useGameStore.getState();
+      switch (e.key) {
+        case '1': state.setCameraView('cab'); break;
+        case '2': state.setCameraView('front'); break;
+        case '3': state.setCameraView('rear'); break;
+        case '4': state.setCameraView('chase'); break;
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   useFrame(() => {
-    const position = useGameStore.getState().train.position;
-    const speed = useGameStore.getState().train.velocity;
+    const state = useGameStore.getState();
+    const position = state.train.position;
+    const speed = state.train.velocity;
+    const view = state.cameraView;
 
     if (view === 'cab') {
-      // Position inside the cab (front of the train)
       targetPosition.current.set(0, 3.5, position + 7);
-      
-      // Simulate subtle head bobbing based on speed
       const bobbing = Math.sin(performance.now() * 0.005) * (Math.abs(speed) * 0.002);
       targetPosition.current.y += bobbing;
-      
-      lookAtPosition.current.set(0, 3.5, position + 20); // Look ahead
-    } else {
-      // Chase camera
-      targetPosition.current.set(8, 8, position - 15);
-      lookAtPosition.current.set(0, 2, position + 5);
+      lookAtPosition.current.set(0, 3.5, position + 20);
+    } else if (view === 'front') {
+      targetPosition.current.set(5, 4, position + 15);
+      lookAtPosition.current.set(0, 2, position);
+    } else if (view === 'rear') {
+      targetPosition.current.set(5, 4, position - 150); // Far back to see coaches
+      lookAtPosition.current.set(0, 2, position - 50);
+    } else if (view === 'chase') {
+      targetPosition.current.set(12, 10, position - 30);
+      lookAtPosition.current.set(0, 3, position + 10);
     }
 
-    // Smoothly interpolate camera position
     camera.position.lerp(targetPosition.current, 0.1);
-    camera.lookAt(lookAtPosition.current);
+    
+    // Smoothly interpolate lookat as well
+    const currentLookAt = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).add(camera.position);
+    currentLookAt.lerp(lookAtPosition.current, 0.1);
+    camera.lookAt(currentLookAt);
   });
 
   return null;
